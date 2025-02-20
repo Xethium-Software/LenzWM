@@ -2,7 +2,7 @@
 #include <X11/Xutil.h>
 #include <string.h>
 
-void draw_titlebar(Display *dpy, Window win, const char *title) {
+void draw_titlebar(Display *dpy, Window win, const char *title, int width) {
     GC gc = XCreateGC(dpy, win, 0, NULL);
     XFontStruct *font = XLoadQueryFont(dpy, "fixed");
     
@@ -19,10 +19,9 @@ void draw_titlebar(Display *dpy, Window win, const char *title) {
 
     int text_width = XTextWidth(font, title, strlen(title));
 
-    XFillRectangle(dpy, win, gc, 0, 0, 400, 20);
-
+    XFillRectangle(dpy, win, gc, 0, 0, width, 20);
     XSetForeground(dpy, gc, text_color.pixel);
-    XDrawString(dpy, win, gc, (400 - text_width)/2, 15, title, strlen(title));
+    XDrawString(dpy, win, gc, (width - text_width)/2, 15, title, strlen(title));
 
     XFreeGC(dpy, gc);
     XFreeFont(dpy, font);
@@ -31,6 +30,13 @@ void draw_titlebar(Display *dpy, Window win, const char *title) {
 int main() {
     Display *dpy = XOpenDisplay(NULL);
     Window root = DefaultRootWindow(dpy);
+    
+    // Get screen dimensions
+    XWindowAttributes root_attrs;
+    XGetWindowAttributes(dpy, root, &root_attrs);
+    int screen_width = root_attrs.width;
+    int screen_height = root_attrs.height;
+
     XSelectInput(dpy, root, SubstructureRedirectMask | SubstructureNotifyMask);
 
     XSetWindowAttributes attrs = {
@@ -45,41 +51,44 @@ int main() {
             case MapRequest: {
                 Window client = ev.xmaprequest.window;
                 
-                Window frame = XCreateSimpleWindow(dpy, root, 0, 0, 400, 300, 1,
-                                                 BlackPixel(dpy, 0),
-                                                 WhitePixel(dpy, 0));
+                Window frame = XCreateSimpleWindow(dpy, root, 0, 0, 
+                                                  screen_width, screen_height,
+                                                  1, BlackPixel(dpy, 0),
+                                                  WhitePixel(dpy, 0));
                 
                 XReparentWindow(dpy, client, frame, 0, 20);
                 
                 XSelectInput(dpy, frame, ExposureMask);
                 XMapWindow(dpy, frame);
                 XMapWindow(dpy, client);
-                XMoveResizeWindow(dpy, client, 0, 20, 400, 280);
+                
+                XMoveResizeWindow(dpy, client, 0, 20, 
+                                 screen_width, screen_height - 20);
 
                 XTextProperty name;
                 char *title = "LenzWM Window";
                 if (XGetWMName(dpy, client, &name)) {
                     title = (char *)name.value;
                 }
-
-                draw_titlebar(dpy, frame, title);
+                
+                draw_titlebar(dpy, frame, title, screen_width);
                 break;
             }
             
             case Expose:
                 if (ev.xexpose.window != root) {
-                    Window root_return, parent_return;
+                    Window root_ret, parent_ret;
                     Window *children;
                     unsigned int nchildren;
-                    XQueryTree(dpy, ev.xexpose.window, &root_return,
-                             &parent_return, &children, &nchildren);
+                    XQueryTree(dpy, ev.xexpose.window, &root_ret,
+                              &parent_ret, &children, &nchildren);
                     
                     char *title = "LenzWM Window";
                     XTextProperty name;
-                    if (XGetWMName(dpy, parent_return, &name)) {
+                    if (XGetWMName(dpy, parent_ret, &name)) {
                         title = (char *)name.value;
                     }
-                    draw_titlebar(dpy, parent_return, title);
+                    draw_titlebar(dpy, parent_ret, title, screen_width);
                 }
                 break;
         }
